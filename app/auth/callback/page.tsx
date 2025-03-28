@@ -1,0 +1,86 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
+import { useAuth } from "@/app/context/AuthContext";
+
+export default function AuthCallback() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const { handleTokenCallback } = useAuth();
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const processCallback = () => {
+      try {
+        // Extract token data from URL parameters
+        const accessToken = searchParams.get("access_token");
+        const refreshToken = searchParams.get("refresh_token");
+        const expiresIn = searchParams.get("expires_in");
+        const callbackUrl = searchParams.get("callbackUrl") || "/";
+
+        // Validate parameters
+        if (!accessToken || !refreshToken || !expiresIn) {
+          throw new Error("Missing authentication data in the callback URL");
+        }
+
+        // Process the tokens in our auth context
+        handleTokenCallback(accessToken, refreshToken, parseInt(expiresIn, 10));
+
+        // Check if we have a saved redirect URL
+        const savedRedirect = localStorage.getItem("anychat_login_redirect");
+
+        // Clear the saved redirect
+        localStorage.removeItem("anychat_login_redirect");
+
+        // Redirect to the saved URL, explicit callback URL, or home page
+        if (savedRedirect) {
+          router.push(savedRedirect);
+        } else if (callbackUrl && callbackUrl !== "/") {
+          router.push(callbackUrl);
+        } else {
+          router.push("/");
+        }
+      } catch (err) {
+        console.error("Error processing auth callback:", err);
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Failed to process authentication"
+        );
+      }
+    };
+
+    processCallback();
+  }, [searchParams, router, handleTokenCallback]);
+
+  if (error) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center p-4 bg-background">
+        <div className="max-w-md w-full p-6 bg-white dark:bg-[#202123] rounded-lg shadow-lg">
+          <h1 className="text-xl font-bold mb-4 text-red-600">
+            Authentication Error
+          </h1>
+          <p className="mb-4">{error}</p>
+          <button
+            onClick={() => router.push("/")}
+            className="w-full py-2 px-4 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+          >
+            Return to Home
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen flex flex-col items-center justify-center p-4 bg-background">
+      <div className="max-w-md w-full p-6 bg-white dark:bg-[#202123] rounded-lg shadow-lg">
+        <h1 className="text-xl font-bold mb-4">Completing Login</h1>
+        <div className="flex justify-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+        </div>
+      </div>
+    </div>
+  );
+}
