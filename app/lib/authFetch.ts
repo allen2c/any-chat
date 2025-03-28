@@ -1,5 +1,7 @@
 "use client";
 
+// app/lib/authFetch.ts
+
 // Constants
 const TOKEN_STORAGE_KEY = "anychat_access_token";
 const REFRESH_TOKEN_STORAGE_KEY = "anychat_refresh_token";
@@ -28,7 +30,7 @@ export async function authFetch(
   };
 
   // Make the request
-  const response = await fetch(url, {
+  let response = await fetch(url, {
     ...options,
     headers,
   });
@@ -45,10 +47,20 @@ export async function authFetch(
         Authorization: `Bearer ${newToken}`,
       };
 
-      return fetch(url, {
+      // Retry the request with the new token
+      response = await fetch(url, {
         ...options,
         headers: newHeaders,
       });
+
+      // If still unauthorized after token refresh, redirect to login
+      if (response.status === 401) {
+        console.error("Still unauthorized after token refresh");
+        window.location.href = "http://localhost:3000/login";
+        throw new Error("Authentication failed even after token refresh");
+      }
+
+      return response;
     } catch (error) {
       // If token refresh fails, redirect to login
       console.error("Token refresh failed:", error);
@@ -85,7 +97,10 @@ async function refreshToken(): Promise<string> {
   });
 
   if (!response.ok) {
-    throw new Error("Failed to refresh token");
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(
+      errorData.error || `Failed to refresh token: ${response.status}`
+    );
   }
 
   const data = await response.json();
@@ -94,6 +109,17 @@ async function refreshToken(): Promise<string> {
   localStorage.setItem(TOKEN_STORAGE_KEY, data.access_token);
   if (data.refresh_token) {
     localStorage.setItem(REFRESH_TOKEN_STORAGE_KEY, data.refresh_token);
+  }
+
+  // Also update the token expiration if available
+  if (data.expires_in) {
+    const expiresAt = Date.now() + data.expires_in * 1000;
+    localStorage.setItem("anychat_expires_at", expiresAt.toString());
+  }
+
+  // Update the user data if it's provided in the token response
+  if (data.user) {
+    localStorage.setItem("anychat_user", JSON.stringify(data.user));
   }
 
   return data.access_token;

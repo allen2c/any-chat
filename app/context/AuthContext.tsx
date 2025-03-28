@@ -15,6 +15,11 @@ interface User {
   name: string;
   email: string;
   avatar?: string;
+  email_verified?: boolean;
+  username?: string;
+  full_name?: string;
+  disabled?: boolean;
+  metadata?: Record<string, unknown>;
 }
 
 // Define the auth state
@@ -25,6 +30,7 @@ interface AuthState {
   expiresAt: number | null;
   isLoading: boolean;
   isAuthenticated: boolean;
+  error: string | null;
 }
 
 // Define the auth context properties
@@ -35,7 +41,8 @@ interface AuthContextType extends AuthState {
     accessToken: string,
     refreshToken: string,
     expiresIn: number
-  ) => void;
+  ) => Promise<void>;
+  refreshTokenIfNeeded: () => Promise<boolean>;
 }
 
 // Create the context with a default value
@@ -59,11 +66,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     expiresAt: null,
     isLoading: true,
     isAuthenticated: false,
+    error: null,
   });
 
   // Initialize auth state from local storage
   useEffect(() => {
-    const loadAuthState = () => {
+    const loadAuthState = async () => {
       try {
         // Get stored values
         const storedToken = localStorage.getItem(TOKEN_STORAGE_KEY);
@@ -86,9 +94,64 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               user,
               isLoading: false,
               isAuthenticated: true,
+              error: null,
             });
+
+            // Fetch fresh user data
+            try {
+              const userData = await fetchUserData(storedToken);
+              if (userData) {
+                // Update user data in state and localStorage
+                const updatedUser = { ...user, ...userData };
+                localStorage.setItem(
+                  USER_STORAGE_KEY,
+                  JSON.stringify(updatedUser)
+                );
+                setAuthState((prev) => ({
+                  ...prev,
+                  user: updatedUser,
+                }));
+              }
+            } catch (error) {
+              console.warn(
+                "Failed to refresh user data on init, using cached data",
+                error
+              );
+            }
+          } else if (storedRefreshToken) {
+            // Token expired, try to refresh
+            try {
+              const refreshed = await refreshToken(storedRefreshToken);
+              if (refreshed) {
+                console.log("Successfully refreshed token on init");
+              } else {
+                // Refresh failed, clear storage and state
+                clearAuthData();
+                setAuthState({
+                  user: null,
+                  accessToken: null,
+                  refreshToken: null,
+                  expiresAt: null,
+                  isLoading: false,
+                  isAuthenticated: false,
+                  error: "Session expired. Please log in again.",
+                });
+              }
+            } catch (error) {
+              console.error("Error refreshing token on init:", error);
+              clearAuthData();
+              setAuthState({
+                user: null,
+                accessToken: null,
+                refreshToken: null,
+                expiresAt: null,
+                isLoading: false,
+                isAuthenticated: false,
+                error: "Failed to refresh authentication. Please log in again.",
+              });
+            }
           } else {
-            // Token expired, clear storage and state
+            // No refresh token, clear storage and state
             clearAuthData();
             setAuthState({
               user: null,
@@ -97,6 +160,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               expiresAt: null,
               isLoading: false,
               isAuthenticated: false,
+              error: null,
             });
           }
         } else {
@@ -113,6 +177,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           expiresAt: null,
           isLoading: false,
           isAuthenticated: false,
+          error: "Failed to load authentication state.",
         });
       }
     };
@@ -128,6 +193,98 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem(USER_STORAGE_KEY);
   };
 
+  // Refresh token
+  const refreshToken = async (refreshTokenValue: string): Promise<boolean> => {
+    try {
+      // Create FormData for the request
+      const formData = new URLSearchParams();
+      formData.append("grant_type", "refresh_token");
+      formData.append("refresh_token", refreshTokenValue);
+
+      // Make the request to refresh token
+      const response = await fetch("http://localhost:3000/api/auth/refresh", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to refresh token: ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      // Calculate expiration time
+      const expiresAt = Date.now() + data.expires_in * 1000;
+
+      // Store new tokens
+      localStorage.setItem(TOKEN_STORAGE_KEY, data.access_token);
+      localStorage.setItem(REFRESH_TOKEN_STORAGE_KEY, data.refresh_token);
+      localStorage.setItem(EXPIRES_AT_STORAGE_KEY, expiresAt.toString());
+
+      // Fetch user data with the new token
+      const userData = await fetchUserData(data.access_token);
+      if (userData) {
+        localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(userData));
+
+        // Update auth state
+        setAuthState({
+          accessToken: data.access_token,
+          refreshToken: data.refresh_token,
+          expiresAt: expiresAt,
+          user: userData,
+          isLoading: false,
+          isAuthenticated: true,
+          error: null,
+        });
+
+        return true;
+      }
+
+      return false;
+    } catch (error) {
+      console.error("Token refresh failed:", error);
+      return false;
+    }
+  };
+
+  // Fetch user data using token
+  const fetchUserData = async (token: string): Promise<User | null> => {
+    try {
+      const response = await fetch("http://localhost:3000/api/me", {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch user data: ${response.status}`);
+      }
+
+      const userData = await response.json();
+
+      // Convert the API response to our User interface
+      const user: User = {
+        id: userData.id,
+        name: userData.full_name || userData.username || "User",
+        email: userData.email || "",
+        avatar: userData.picture || null,
+        email_verified: userData.email_verified,
+        username: userData.username,
+        full_name: userData.full_name,
+        disabled: userData.disabled,
+        metadata: userData.metadata,
+      };
+
+      return user;
+    } catch (error) {
+      console.error("Error fetching user data:", error);
+      return null;
+    }
+  };
+
   // Handle login redirect
   const login = () => {
     // Store the current URL to redirect back after login
@@ -141,21 +298,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   // Handle the token received from SSO callback
-  const handleTokenCallback = (
+  const handleTokenCallback = async (
     accessToken: string,
     refreshToken: string,
     expiresIn: number
   ) => {
     try {
-      // Decode JWT to get user info
-      const payload = JSON.parse(atob(accessToken.split(".")[1]));
-      const user: User = {
-        id: payload.sub,
-        name: payload.name || "User",
-        email: payload.email || "",
-        avatar: payload.picture,
-      };
-
       // Calculate token expiration time
       const expiresAt = Date.now() + expiresIn * 1000;
 
@@ -163,21 +311,49 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       localStorage.setItem(TOKEN_STORAGE_KEY, accessToken);
       localStorage.setItem(REFRESH_TOKEN_STORAGE_KEY, refreshToken);
       localStorage.setItem(EXPIRES_AT_STORAGE_KEY, expiresAt.toString());
-      localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(user));
+
+      // Fetch user data with the token
+      const userData = await fetchUserData(accessToken);
+
+      if (!userData) {
+        throw new Error("Failed to fetch user data after authentication");
+      }
+
+      // Store user data
+      localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(userData));
 
       // Update auth state
       setAuthState({
-        user,
+        user: userData,
         accessToken,
         refreshToken,
         expiresAt,
         isLoading: false,
         isAuthenticated: true,
+        error: null,
       });
     } catch (error) {
       console.error("Error handling token callback:", error);
       clearAuthData();
+      throw error; // Re-throw to be handled by the callback page
     }
+  };
+
+  // Check if token needs refreshing and refresh if needed
+  const refreshTokenIfNeeded = async (): Promise<boolean> => {
+    // If no refresh token or not authenticated, return false
+    if (!authState.refreshToken || !authState.isAuthenticated) {
+      return false;
+    }
+
+    // If token is expiring soon (within 5 minutes), refresh it
+    const fiveMinutesFromNow = Date.now() + 5 * 60 * 1000;
+    if (authState.expiresAt && authState.expiresAt < fiveMinutesFromNow) {
+      return await refreshToken(authState.refreshToken);
+    }
+
+    // Token is still valid
+    return true;
   };
 
   // Handle logout
@@ -190,6 +366,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       expiresAt: null,
       isLoading: false,
       isAuthenticated: false,
+      error: null,
     });
     router.push("/");
   };
@@ -199,6 +376,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     login,
     logout,
     handleTokenCallback,
+    refreshTokenIfNeeded,
   };
 
   return (

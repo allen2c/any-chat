@@ -9,15 +9,26 @@ export default function AuthCallback() {
   const router = useRouter();
   const { handleTokenCallback } = useAuth();
   const [error, setError] = useState<string | null>(null);
+  const [status, setStatus] = useState<"processing" | "success" | "error">(
+    "processing"
+  );
 
   useEffect(() => {
-    const processCallback = () => {
+    const processCallback = async () => {
       try {
+        setStatus("processing");
+
         // Extract token data from URL parameters
         const accessToken = searchParams.get("access_token");
         const refreshToken = searchParams.get("refresh_token");
         const expiresIn = searchParams.get("expires_in");
-        const callbackUrl = searchParams.get("callbackUrl") || "/";
+
+        // Log what we've received for debugging
+        console.log("Auth callback received params:", {
+          hasAccessToken: !!accessToken,
+          hasRefreshToken: !!refreshToken,
+          expiresIn,
+        });
 
         // Validate parameters
         if (!accessToken || !refreshToken || !expiresIn) {
@@ -25,19 +36,23 @@ export default function AuthCallback() {
         }
 
         // Process the tokens in our auth context
-        handleTokenCallback(accessToken, refreshToken, parseInt(expiresIn, 10));
+        await handleTokenCallback(
+          accessToken,
+          refreshToken,
+          parseInt(expiresIn, 10)
+        );
+        setStatus("success");
 
         // Check if we have a saved redirect URL
         const savedRedirect = localStorage.getItem("anychat_login_redirect");
+        console.log("Redirecting to:", savedRedirect || "/");
 
         // Clear the saved redirect
         localStorage.removeItem("anychat_login_redirect");
 
-        // Redirect to the saved URL, explicit callback URL, or home page
+        // Redirect to the saved URL or home page
         if (savedRedirect) {
           router.push(savedRedirect);
-        } else if (callbackUrl && callbackUrl !== "/") {
-          router.push(callbackUrl);
         } else {
           router.push("/");
         }
@@ -48,6 +63,7 @@ export default function AuthCallback() {
             ? err.message
             : "Failed to process authentication"
         );
+        setStatus("error");
       }
     };
 
@@ -80,6 +96,9 @@ export default function AuthCallback() {
         <div className="flex justify-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
         </div>
+        <p className="text-sm text-center mt-4 text-gray-600">
+          Verifying your credentials and setting up your session...
+        </p>
       </div>
     </div>
   );
