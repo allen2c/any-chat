@@ -1,22 +1,36 @@
 app/
 ├── components/
+│   ├── auth/
+│   │   ├── LoginButton.tsx      # Login button component
+│   │   ├── LogoutButton.tsx     # Logout button component
+│   │   ├── LoginHintCard.tsx    # Card showing login hint
+│   │   ├── ProfileLoader.tsx    # User profile loader component
+│   │   └── ProtectedRoute.tsx   # Route protection wrapper
 │   ├── chat/
-│   │   ├── ChatContainer.tsx   # Main chat window container
-│   │   ├── ChatInput.tsx       # Message input component
-│   │   ├── ChatMessage.tsx     # Individual message component
-│   │   └── MessageList.tsx     # List of chat messages
+│   │   ├── ChatContainer.tsx    # Main chat window container
+│   │   ├── ChatInput.tsx        # Message input component
+│   │   ├── ChatMessage.tsx      # Individual message component
+│   │   └── MessageList.tsx      # List of chat messages
 │   ├── sidebar/
-│   │   ├── Sidebar.tsx         # Main sidebar component
-│   │   ├── SidebarHeader.tsx   # Logo and collapse trigger
-│   │   ├── SidebarFooter.tsx   # User info and project selector
-│   │   └── ProjectCard.tsx     # Project info card (clickable)
+│   │   ├── Sidebar.tsx          # Main sidebar component
+│   │   ├── SidebarHeader.tsx    # Logo and collapse trigger
+│   │   ├── SidebarFooter.tsx    # User info and project selector
+│   │   └── ProjectCard.tsx      # Project info card (clickable)
 │   └── ui/
-│       ├── Button.tsx          # Reusable button component
-│       └── icons.tsx           # SVG icons used throughout the app
+│       ├── Button.tsx           # Reusable button component
+│       └── icons.tsx            # SVG icons used throughout the app
 ├── context/
-│   └── SidebarContext.tsx      # Manage sidebar collapse state
+│   ├── AuthContext.tsx          # Authentication context provider
+│   └── SidebarContext.tsx       # Manage sidebar collapse state
+├── auth/
+│   └── callback/
+│       └── page.tsx             # Auth callback page for SSO
 ├── types/
-│   └── index.ts                # TypeScript types and interfaces
+│   └── index.ts                 # TypeScript types and interfaces
 ├── lib/
-│   └── utils.ts                # Utility functions
-└── page.tsx                    # Main application page
+│   ├── utils.ts                 # Utility functions
+│   ├── authFetch.ts             # Authentication fetch wrapper
+│   └── apiFetcher.ts            # API fetch utility with auth handling
+├── globals.css                  # Global CSS styles
+├── layout.tsx                   # Root application layout
+└── page.tsx                     # Main application page
