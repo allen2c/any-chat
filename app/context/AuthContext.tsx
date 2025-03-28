@@ -294,14 +294,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Save the current path to localStorage for later retrieval
     localStorage.setItem("anychat_login_redirect", window.location.href);
 
-    // Redirect to SSO login page with return URL
-    window.location.href = `${SSO_URL}?callbackUrl=${returnUrl}`;
+    // Generate the callback URL for AnyAuth to redirect back to
+    const callbackUrl = `http://localhost:3010/auth/callback`;
+
+    // Redirect to SSO login page with callback URL
+    window.location.href = `${SSO_URL}?callbackUrl=${encodeURIComponent(
+      callbackUrl
+    )}`;
   }, []);
 
   // Handle the token received from SSO callback
   const handleTokenCallback = useCallback(
     async (accessToken: string, refreshToken: string, expiresIn: number) => {
       try {
+        console.log("Processing auth tokens...");
+
         // Calculate token expiration time
         const expiresAt = Date.now() + expiresIn * 1000;
 
@@ -310,12 +317,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         localStorage.setItem(REFRESH_TOKEN_STORAGE_KEY, refreshToken);
         localStorage.setItem(EXPIRES_AT_STORAGE_KEY, expiresAt.toString());
 
+        console.log("Tokens stored in localStorage");
+
         // Fetch user data with the token
         const userData = await fetchUserData(accessToken);
 
         if (!userData) {
           throw new Error("Failed to fetch user data after authentication");
         }
+
+        console.log("User data retrieved successfully");
 
         // Store user data
         localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(userData));
@@ -333,6 +344,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         // Update initialization status
         setIsInitialized(true);
+
+        console.log("Authentication completed successfully");
       } catch (error) {
         console.error("Error handling token callback:", error);
         clearAuthData();

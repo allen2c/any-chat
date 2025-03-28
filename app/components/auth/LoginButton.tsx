@@ -1,3 +1,5 @@
+// app/components/auth/LoginButton.tsx
+
 "use client";
 
 import { useAuth } from "@/app/context/AuthContext";
@@ -18,10 +20,24 @@ export function LoginButton({
   const handleLogin = async () => {
     try {
       setIsLoggingIn(true);
-      await login();
+
+      // Store the current URL to redirect back after login
+      const currentUrl = window.location.href;
+      localStorage.setItem("anychat_login_redirect", currentUrl);
+
+      // Generate the callback URL - this is crucial for the cross-domain auth
+      const callbackUrl = `http://localhost:3010/auth/callback`;
+
+      // Construct the login URL with the callback
+      const loginUrl = `http://localhost:3000/login?callbackUrl=${encodeURIComponent(
+        callbackUrl
+      )}`;
+
+      // Redirect to AnyAuth login
+      window.location.href = loginUrl;
     } catch (error) {
       console.error("Login failed:", error);
-      // The login function handles the redirect, so we don't need additional error handling here
+      setIsLoggingIn(false);
     }
   };
 
