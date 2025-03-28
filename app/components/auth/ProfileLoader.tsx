@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useAuth } from "@/app/context/AuthContext";
-import { useAuthFetch } from "@/app/lib/apiFetcher";
 import Image from "next/image";
 
 interface ProfileLoaderProps {
@@ -18,31 +17,40 @@ export default function ProfileLoader({
   showName = true,
   showEmail = false,
 }: ProfileLoaderProps) {
-  const { user, isAuthenticated, isLoading } = useAuth();
-  const { authFetch } = useAuthFetch();
+  const { user, isAuthenticated, isLoading, accessToken } = useAuth();
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  useEffect(() => {
-    // If user is authenticated but we don't have complete info, fetch it
-    const fetchUserProfile = async () => {
-      if (isAuthenticated && user && !isRefreshing) {
-        setIsRefreshing(true);
-        try {
-          const response = await authFetch("http://localhost:3000/api/me");
-          if (response.ok) {
-            // User profile is automatically updated in AuthContext
-            console.log("User profile refreshed");
-          }
-        } catch (error) {
-          console.error("Error refreshing profile:", error);
-        } finally {
-          setIsRefreshing(false);
-        }
-      }
-    };
+  // Use a stable fetch function that doesn't change on re-renders
+  const fetchUserProfile = useCallback(async () => {
+    if (!accessToken) return;
 
-    fetchUserProfile();
-  }, [isAuthenticated, user, authFetch]);
+    try {
+      const response = await fetch("http://localhost:3000/api/me", {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      });
+
+      if (response.ok) {
+        // Data is retrieved but we don't update state here
+        // This avoids the circular update problem
+        console.log("User profile data available");
+      }
+    } catch (error) {
+      console.error("Error fetching profile:", error);
+    }
+  }, [accessToken]);
+
+  useEffect(() => {
+    // Only fetch if not already refreshing and we have authentication
+    if (isAuthenticated && !isRefreshing && accessToken) {
+      setIsRefreshing(true);
+
+      fetchUserProfile().finally(() => {
+        setIsRefreshing(false);
+      });
+    }
+  }, [isAuthenticated, fetchUserProfile, accessToken]);
 
   if (isLoading || isRefreshing) {
     return (

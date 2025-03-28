@@ -1,6 +1,7 @@
 "use client";
 
 import { useAuth } from "@/app/context/AuthContext";
+import { useCallback } from "react";
 
 /**
  * Custom hook for making authenticated API requests
@@ -13,57 +14,57 @@ export function useAuthFetch() {
    * Makes an authenticated API request using the JWT token
    * Automatically refreshes the token if needed
    */
-  const authFetch = async (
-    url: string,
-    options: RequestInit = {}
-  ): Promise<Response> => {
-    // If not authenticated, throw error
-    if (!isAuthenticated) {
-      throw new Error("User is not authenticated");
-    }
-
-    try {
-      // Try to refresh token if needed
-      await refreshTokenIfNeeded();
-
-      // Add the Authorization header with the token
-      const headers = new Headers(options.headers || {});
-      if (accessToken) {
-        headers.set("Authorization", `Bearer ${accessToken}`);
+  const authFetch = useCallback(
+    async (url: string, options: RequestInit = {}): Promise<Response> => {
+      // If not authenticated, throw error
+      if (!isAuthenticated) {
+        throw new Error("User is not authenticated");
       }
 
-      // Make the request with the JWT token
-      const response = await fetch(url, {
-        ...options,
-        headers,
-      });
+      try {
+        // Try to refresh token if needed
+        await refreshTokenIfNeeded();
 
-      // Handle 401 Unauthorized - token might be invalid
-      if (response.status === 401) {
-        // Check if refresh was successful
-        const refreshed = await refreshTokenIfNeeded();
-
-        if (refreshed && accessToken) {
-          // Update Authorization header and retry request
+        // Add the Authorization header with the token
+        const headers = new Headers(options.headers || {});
+        if (accessToken) {
           headers.set("Authorization", `Bearer ${accessToken}`);
-          return fetch(url, {
-            ...options,
-            headers,
-          });
-        } else {
-          // If refresh failed, user needs to log in again
-          console.error("Token refresh failed, redirecting to login");
-          login();
-          throw new Error("Authentication expired. Please log in again.");
         }
-      }
 
-      return response;
-    } catch (error) {
-      console.error("Error in authFetch:", error);
-      throw error;
-    }
-  };
+        // Make the request with the JWT token
+        const response = await fetch(url, {
+          ...options,
+          headers,
+        });
+
+        // Handle 401 Unauthorized - token might be invalid
+        if (response.status === 401) {
+          // Check if refresh was successful
+          const refreshed = await refreshTokenIfNeeded();
+
+          if (refreshed && accessToken) {
+            // Update Authorization header and retry request
+            headers.set("Authorization", `Bearer ${accessToken}`);
+            return fetch(url, {
+              ...options,
+              headers,
+            });
+          } else {
+            // If refresh failed, user needs to log in again
+            console.error("Token refresh failed, redirecting to login");
+            login();
+            throw new Error("Authentication expired. Please log in again.");
+          }
+        }
+
+        return response;
+      } catch (error) {
+        console.error("Error in authFetch:", error);
+        throw error;
+      }
+    },
+    [isAuthenticated, refreshTokenIfNeeded, accessToken, login]
+  );
 
   return { authFetch };
 }

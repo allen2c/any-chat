@@ -1,15 +1,14 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { MessageList } from "./MessageList";
 import { ChatInput } from "./ChatInput";
 import { useAuth } from "@/app/context/AuthContext";
 import { LoginButton } from "../auth/LoginButton";
-import { useAuthFetch } from "@/app/lib/apiFetcher";
+import { apiRequest } from "@/app/lib/apiFetcher";
 
 export function ChatContainer() {
   const { isAuthenticated, user, isLoading } = useAuth();
-  const { authFetch } = useAuthFetch();
   const [messages, setMessages] = useState<
     Array<{
       id: string;
@@ -19,92 +18,77 @@ export function ChatContainer() {
     }>
   >([]);
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
+  const [messagesInitialized, setMessagesInitialized] = useState(false);
 
   // Load initial messages based on authentication status
-  useEffect(() => {
-    if (isLoading) return; // Wait until auth state is determined
+  // This is a memoized function to avoid recreation on every render
+  const loadMessages = useCallback(async () => {
+    if (isLoading || messagesInitialized) return; // Skip if loading or already initialized
 
-    const loadMessages = async () => {
-      setIsLoadingMessages(true);
+    setIsLoadingMessages(true);
 
-      if (isAuthenticated && user) {
-        try {
-          // In a real app, fetch message history from API
-          // For now, just show a personalized welcome message
-          setMessages([
-            {
-              id: "1",
-              content: `Welcome back, ${user.name}! How can I assist you today?`,
-              role: "assistant",
-              timestamp: new Date(),
-            },
-          ]);
-
-          // Example of how you could fetch messages from the backend
-          /*
-          const response = await authFetch('http://localhost:3000/api/messages');
-          if (response.ok) {
-            const data = await response.json();
-            setMessages(data.messages);
-          }
-          */
-        } catch (error) {
-          console.error("Error loading messages:", error);
-          setMessages([
-            {
-              id: "1",
-              content: `Welcome back! There was an issue loading your messages.`,
-              role: "assistant",
-              timestamp: new Date(),
-            },
-          ]);
-        }
-      } else {
-        // For anonymous users, show a general welcome with login prompt
+    if (isAuthenticated && user) {
+      try {
+        // Set a personalized welcome message
         setMessages([
           {
             id: "1",
-            content:
-              "Welcome to AnyChat! You're currently using the app as a guest. Your messages won't be saved between sessions.",
+            content: `Welcome back, ${user.name}! How can I assist you today?`,
             role: "assistant",
             timestamp: new Date(),
           },
         ]);
-      }
 
-      setIsLoadingMessages(false);
-    };
-
-    loadMessages();
-  }, [isAuthenticated, user, isLoading, authFetch]);
-
-  const handleSendMessage = async (content: string) => {
-    // Add user message to UI immediately
-    const userMessage = {
-      id: Date.now().toString(),
-      content,
-      role: "user" as const,
-      timestamp: new Date(),
-    };
-
-    setMessages((prev) => [...prev, userMessage]);
-
-    // In a real app, you would call the API to send the message
-    // For authenticated users, you'd use authFetch
-    try {
-      /* Example of sending message to backend
-      if (isAuthenticated) {
-        await authFetch('http://localhost:3000/api/messages', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
+        // Mark as initialized to prevent multiple loads
+        setMessagesInitialized(true);
+      } catch (error) {
+        console.error("Error loading messages:", error);
+        setMessages([
+          {
+            id: "1",
+            content: `Welcome back! There was an issue loading your messages.`,
+            role: "assistant",
+            timestamp: new Date(),
           },
-          body: JSON.stringify({ content }),
-        });
+        ]);
+        setMessagesInitialized(true);
       }
-      */
+    } else if (!isLoading && !isAuthenticated) {
+      // For anonymous users, show a general welcome with login prompt
+      setMessages([
+        {
+          id: "1",
+          content:
+            "Welcome to AnyChat! You're currently using the app as a guest. Your messages won't be saved between sessions.",
+          role: "assistant",
+          timestamp: new Date(),
+        },
+      ]);
+      setMessagesInitialized(true);
+    }
 
-      // Simulate AI response (in a real app, this would be the API response)
+    setIsLoadingMessages(false);
+  }, [isAuthenticated, user, isLoading, messagesInitialized]);
+
+  // Only run the effect when authentication state changes
+  useEffect(() => {
+    loadMessages();
+  }, [isAuthenticated, user, loadMessages]);
+
+  // This is a memoized function to prevent recreation on each render
+  const handleSendMessage = useCallback(
+    async (content: string) => {
+      // Add user message to UI immediately
+      const userMessage = {
+        id: Date.now().toString(),
+        content,
+        role: "user" as const,
+        timestamp: new Date(),
+      };
+
+      setMessages((prev) => [...prev, userMessage]);
+
+      // Simulate AI response (in a real app, this would call the API)
       setTimeout(() => {
         const aiMessage = {
           id: (Date.now() + 1).toString(),
@@ -118,19 +102,9 @@ export function ChatContainer() {
         };
         setMessages((prev) => [...prev, aiMessage]);
       }, 1000);
-    } catch (error) {
-      console.error("Error sending message:", error);
-      // Show error message
-      const errorMessage = {
-        id: (Date.now() + 1).toString(),
-        content:
-          "Sorry, there was an error sending your message. Please try again.",
-        role: "assistant" as const,
-        timestamp: new Date(),
-      };
-      setMessages((prev) => [...prev, errorMessage]);
-    }
-  };
+    },
+    [isAuthenticated, user]
+  );
 
   return (
     <main className="flex-1 flex flex-col h-full overflow-hidden">
