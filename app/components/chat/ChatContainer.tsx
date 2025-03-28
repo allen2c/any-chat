@@ -1,3 +1,4 @@
+// app/components/chat/ChatContainer.tsx
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
@@ -5,10 +6,18 @@ import { MessageList } from "./MessageList";
 import { ChatInput } from "./ChatInput";
 import { useAuth } from "@/app/context/AuthContext";
 import { LoginButton } from "../auth/LoginButton";
-import { apiRequest } from "@/app/lib/apiFetcher";
+import { UserCard } from "../auth/UserCard";
+import { getUserProfile } from "@/app/lib/apiFetcher";
+
+// Define the UserProfile interface
+interface UserProfile {
+  full_name?: string;
+  username?: string;
+  // Add other relevant fields as necessary
+}
 
 export function ChatContainer() {
-  const { isAuthenticated, user, isLoading } = useAuth();
+  const { isAuthenticated, isLoading } = useAuth();
   const [messages, setMessages] = useState<
     Array<{
       id: string;
@@ -19,21 +28,51 @@ export function ChatContainer() {
   >([]);
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const [messagesInitialized, setMessagesInitialized] = useState(false);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+
+  // Load user profile
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    const fetchUserProfile = async () => {
+      try {
+        const profile = await getUserProfile();
+        setUserProfile(profile);
+      } catch (error) {
+        console.error("Failed to load user profile:", error);
+      }
+    };
+
+    fetchUserProfile();
+  }, [isAuthenticated]);
 
   // Load initial messages based on authentication status
-  // This is a memoized function to avoid recreation on every render
   const loadMessages = useCallback(async () => {
     if (isLoading || messagesInitialized) return; // Skip if loading or already initialized
 
     setIsLoadingMessages(true);
 
-    if (isAuthenticated && user) {
+    if (isAuthenticated) {
       try {
+        // Try to get the user profile if not yet loaded
+        let userName = "there";
+        if (!userProfile) {
+          try {
+            const profile = await getUserProfile();
+            setUserProfile(profile);
+            userName = profile.full_name || profile.username || "there";
+          } catch (error) {
+            console.error("Error loading user profile:", error);
+          }
+        } else {
+          userName = userProfile.full_name || userProfile.username || "there";
+        }
+
         // Set a personalized welcome message
         setMessages([
           {
             id: "1",
-            content: `Welcome back, ${user.name}! How can I assist you today?`,
+            content: `Welcome back, ${userName}! How can I assist you today?`,
             role: "assistant",
             timestamp: new Date(),
           },
@@ -68,14 +107,14 @@ export function ChatContainer() {
     }
 
     setIsLoadingMessages(false);
-  }, [isAuthenticated, user, isLoading, messagesInitialized]);
+  }, [isAuthenticated, isLoading, messagesInitialized, userProfile]);
 
   // Only run the effect when authentication state changes
   useEffect(() => {
     loadMessages();
-  }, [isAuthenticated, user, loadMessages]);
+  }, [isAuthenticated, loadMessages]);
 
-  // This is a memoized function to prevent recreation on each render
+  // Handle sending messages
   const handleSendMessage = useCallback(
     async (content: string) => {
       // Add user message to UI immediately
@@ -94,7 +133,7 @@ export function ChatContainer() {
           id: (Date.now() + 1).toString(),
           content: isAuthenticated
             ? `This is a personalized response for ${
-                user?.name || "you"
+                userProfile?.full_name || userProfile?.username || "you"
               }. How can I help today?`
             : "This is a response for guest users. Sign in to get personalized responses!",
           role: "assistant" as const,
@@ -103,7 +142,7 @@ export function ChatContainer() {
         setMessages((prev) => [...prev, aiMessage]);
       }, 1000);
     },
-    [isAuthenticated, user]
+    [isAuthenticated, userProfile]
   );
 
   return (
@@ -116,6 +155,20 @@ export function ChatContainer() {
             conversations.
           </p>
           <LoginButton className="text-xs py-1" />
+        </div>
+      )}
+
+      {/* Display authenticated user info */}
+      {!isLoading && isAuthenticated && (
+        <div className="bg-gray-50 dark:bg-gray-800/30 p-3 flex items-center justify-between">
+          <p className="text-sm text-gray-800 dark:text-gray-300">
+            Connected to AnyAuth
+          </p>
+          <div className="flex items-center">
+            <UserCard compact={true} showLogout={false} />
+            <span className="mx-2 text-gray-400">|</span>
+            <LoginButton className="text-xs py-1" />
+          </div>
         </div>
       )}
 

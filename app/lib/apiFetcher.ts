@@ -1,95 +1,162 @@
+// app/lib/apiFetcher.ts
 "use client";
 
 import { useAuth } from "@/app/context/AuthContext";
 import { useCallback } from "react";
 
+interface UseAuthApiOptions {
+  baseUrl?: string;
+  requireAuth?: boolean;
+  redirectToLogin?: boolean;
+}
+
 /**
- * Custom hook for making authenticated API requests
+ * Custom hook for making authenticated API requests to either AnyChat or AnyAuth APIs
  */
-export function useAuthFetch() {
+export function useAuthApi(options: UseAuthApiOptions = {}) {
   const { accessToken, refreshTokenIfNeeded, isAuthenticated, login } =
     useAuth();
 
   /**
    * Makes an authenticated API request using the JWT token
-   * Automatically refreshes the token if needed
    */
   const authFetch = useCallback(
-    async (url: string, options: RequestInit = {}): Promise<Response> => {
-      // If not authenticated, throw error
-      if (!isAuthenticated) {
-        throw new Error("User is not authenticated");
+    async (url: string, fetchOptions: RequestInit = {}) => {
+      // Default options
+      const defaultOptions = {
+        baseUrl: "", // Default to relative URLs (same domain)
+        requireAuth: true,
+        redirectToLogin: true,
+        ...options,
+      };
+
+      // Check if authentication is required
+      if (defaultOptions.requireAuth && !isAuthenticated) {
+        if (defaultOptions.redirectToLogin) {
+          login();
+        }
+        throw new Error("Authentication required");
       }
 
-      try {
-        // Try to refresh token if needed
+      // Check if token needs refreshing before making the request
+      if (isAuthenticated) {
         await refreshTokenIfNeeded();
+      }
 
-        // Add the Authorization header with the token
-        const headers = new Headers(options.headers || {});
-        if (accessToken) {
-          headers.set("Authorization", `Bearer ${accessToken}`);
-        }
+      // Prepare full URL with base URL if provided
+      const fullUrl = url.startsWith("http")
+        ? url
+        : `${defaultOptions.baseUrl}${url}`;
 
-        // Make the request with the JWT token
-        const response = await fetch(url, {
-          ...options,
-          headers,
-        });
+      // Add the Authorization header if it's not already set
+      const headers = new Headers(fetchOptions.headers || {});
+      if (accessToken) {
+        headers.set("Authorization", `Bearer ${accessToken}`);
+      }
 
-        // Handle 401 Unauthorized - token might be invalid
+      // Make the request
+      const response = await fetch(fullUrl, {
+        ...fetchOptions,
+        headers,
+      });
+
+      // Handle response
+      if (!response.ok) {
+        // If we get a 401 Unauthorized, the token might be invalid or expired
         if (response.status === 401) {
-          // Check if refresh was successful
+          // Try to refresh token and retry the request
           const refreshed = await refreshTokenIfNeeded();
 
           if (refreshed && accessToken) {
-            // Update Authorization header and retry request
+            // Update Authorization header and retry the request
             headers.set("Authorization", `Bearer ${accessToken}`);
-            return fetch(url, {
-              ...options,
+            const retryResponse = await fetch(fullUrl, {
+              ...fetchOptions,
               headers,
             });
+
+            if (!retryResponse.ok) {
+              throw new Error(
+                `Request failed with status: ${retryResponse.status}`
+              );
+            }
+
+            return retryResponse;
           } else {
-            // If refresh failed, user needs to log in again
-            console.error("Token refresh failed, redirecting to login");
-            login();
-            throw new Error("Authentication expired. Please log in again.");
+            // If refresh failed, redirect to login if option is enabled
+            if (defaultOptions.redirectToLogin) {
+              login();
+            }
+            throw new Error("Session expired. Please log in again.");
           }
         }
 
-        return response;
-      } catch (error) {
-        console.error("Error in authFetch:", error);
-        throw error;
+        throw new Error(`Request failed with status: ${response.status}`);
       }
+
+      return response;
     },
-    [isAuthenticated, refreshTokenIfNeeded, accessToken, login]
+    [accessToken, isAuthenticated, login, refreshTokenIfNeeded, options]
   );
 
-  return { authFetch };
+  return {
+    authFetch,
+    isAuthenticated,
+  };
 }
 
 /**
- * Makes a one-time authenticated API request using the stored token
- * Use this in non-hook contexts where useAuthFetch can't be used
+ * Makes a one-time authenticated API request to AnyAuth
+ * @param url The URL to fetch, can be a relative path on AnyAuth
+ * @param options Fetch options
+ * @returns Response from the API
  */
-export async function apiRequest(
+export async function fetchFromAnyAuth(
   url: string,
   options: RequestInit = {}
 ): Promise<Response> {
+  // Get the stored token from localStorage
   const token = localStorage.getItem("anychat_access_token");
 
   if (!token) {
     throw new Error("No authentication token available");
   }
 
-  // Add the Authorization header with the token
+  // Construct the full URL if it's a relative path
+  const fullUrl = url.startsWith("http") ? url : `http://localhost:3000${url}`;
+
+  // Add the Authorization header
   const headers = new Headers(options.headers || {});
   headers.set("Authorization", `Bearer ${token}`);
 
   // Make the request
-  return fetch(url, {
-    ...options,
-    headers,
-  });
+  try {
+    const response = await fetch(fullUrl, {
+      ...options,
+      headers,
+    });
+
+    if (!response.ok) {
+      throw new Error(`Request failed with status: ${response.status}`);
+    }
+
+    return response;
+  } catch (error) {
+    console.error(`Error fetching from AnyAuth: ${url}`, error);
+    throw error;
+  }
+}
+
+/**
+ * Get user profile from AnyAuth
+ * @returns User profile data
+ */
+export async function getUserProfile() {
+  try {
+    const response = await fetchFromAnyAuth("/api/me");
+    return await response.json();
+  } catch (error) {
+    console.error("Error fetching user profile:", error);
+    throw error;
+  }
 }
