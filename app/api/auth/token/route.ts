@@ -19,8 +19,10 @@ export async function POST(request: NextRequest) {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        // In a production app, you would add client authentication here
-        // e.g., "Authorization": "Basic " + Buffer.from("client_id:client_secret").toString("base64")
+        // Add client authentication (in a production app, use environment variables)
+        Authorization:
+          "Basic " +
+          Buffer.from("anychat_client:anychat_secret").toString("base64"),
       },
       body: JSON.stringify({
         grant_type: "authorization_code",
@@ -44,9 +46,8 @@ export async function POST(request: NextRequest) {
     // Calculate expiration timestamp
     const expiresAt = Date.now() + expires_in * 1000;
 
-    // Return tokens to the client
-    // In a production app, you would store these in server-side sessions
-    // But for this implementation, we'll return them to be stored in localStorage
+    // Return tokens to the client for now
+    // In a production app, these should be stored in a server-side session instead
     return NextResponse.json({
       accessToken: access_token,
       refreshToken: refresh_token,
