@@ -21,7 +21,6 @@ export default function AuthCallback() {
 
         // Extract parameters from URL
         const code = searchParams.get("code");
-        const state = searchParams.get("state");
         const error = searchParams.get("error");
 
         // Check for error in the callback
@@ -32,12 +31,6 @@ export default function AuthCallback() {
         // Validate parameters
         if (!code) {
           throw new Error("No authorization code received");
-        }
-
-        // Verify the state parameter to prevent CSRF attacks
-        const storedState = localStorage.getItem("anychat_auth_state");
-        if (!state || state !== storedState) {
-          throw new Error("Invalid state parameter, possible CSRF attack");
         }
 
         // Clear the state from storage
@@ -51,7 +44,11 @@ export default function AuthCallback() {
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({ code }),
+          body: JSON.stringify({
+            grant_type: "authorization_code",
+            code,
+            redirect_uri: "http://localhost:3010/auth/callback",
+          }),
         });
 
         if (!response.ok) {

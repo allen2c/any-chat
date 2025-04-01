@@ -24,19 +24,13 @@ export function LoginButton({
       const currentUrl = window.location.href;
       localStorage.setItem("anychat_login_redirect", currentUrl);
 
-      // Generate a random state parameter for CSRF protection
-      const state = generateRandomString(32);
-      localStorage.setItem("anychat_auth_state", state);
-
       // Generate the callback URL - this is crucial for the cross-domain auth
-      const callbackUrl = `http://localhost:3010/auth/callback`;
+      const callbackUrl = "http://localhost:3010/auth/callback";
 
       // Construct the login URL with authorization code flow parameters
       const loginUrl = new URL("http://localhost:3000/login");
       loginUrl.searchParams.append("client_id", "anychat_client");
       loginUrl.searchParams.append("redirect_uri", callbackUrl);
-      loginUrl.searchParams.append("response_type", "code");
-      loginUrl.searchParams.append("state", state);
 
       // Redirect to AnyAuth login
       window.location.href = loginUrl.toString();
@@ -45,18 +39,6 @@ export function LoginButton({
       setIsLoggingIn(false);
     }
   };
-
-  // Helper function to generate a random string for state parameter
-  function generateRandomString(length: number) {
-    const charset =
-      "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-    let result = "";
-    for (let i = 0; i < length; i++) {
-      const randomIndex = Math.floor(Math.random() * charset.length);
-      result += charset[randomIndex];
-    }
-    return result;
-  }
 
   return (
     <button
