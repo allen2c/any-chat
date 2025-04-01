@@ -292,7 +292,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const returnUrl = encodeURIComponent(window.location.href);
 
     // Save the current path to localStorage for later retrieval
-    localStorage.setItem("anychat_login_redirect", window.location.href);
+    localStorage.setItem("anychat_login_redirect", returnUrl);
 
     // Generate the callback URL for AnyAuth to redirect back to
     const callbackUrl = `http://localhost:3010/auth/callback`;
@@ -305,12 +305,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Handle the token received from SSO callback
   const handleTokenCallback = useCallback(
-    async (accessToken: string, refreshToken: string, expiresIn: number) => {
+    async (accessToken: string, refreshToken: string, expiresAt: number) => {
       try {
         console.log("Processing auth tokens...");
-
-        // Calculate token expiration time
-        const expiresAt = Date.now() + expiresIn * 1000;
 
         // Store in localStorage
         localStorage.setItem(TOKEN_STORAGE_KEY, accessToken);

@@ -1,5 +1,4 @@
 // app/auth/callback/page.tsx
-
 "use client";
 
 import { useEffect, useState } from "react";
@@ -20,44 +19,68 @@ export default function AuthCallback() {
       try {
         setStatus("processing");
 
-        // Extract token data from URL parameters
-        const accessToken = searchParams.get("access_token");
-        const refreshToken = searchParams.get("refresh_token");
-        const expiresIn = searchParams.get("expires_in");
+        // Extract parameters from URL
+        const code = searchParams.get("code");
+        const state = searchParams.get("state");
+        const error = searchParams.get("error");
 
-        // Log what we've received for debugging
-        console.log("Auth callback received params:", {
-          hasAccessToken: !!accessToken,
-          hasRefreshToken: !!refreshToken,
-          expiresIn,
-        });
+        // Check for error in the callback
+        if (error) {
+          throw new Error(`Authentication error: ${error}`);
+        }
 
         // Validate parameters
-        if (!accessToken || !refreshToken || !expiresIn) {
-          throw new Error("Missing authentication data in the callback URL");
+        if (!code) {
+          throw new Error("No authorization code received");
         }
+
+        // Verify the state parameter to prevent CSRF attacks
+        const storedState = localStorage.getItem("anychat_auth_state");
+        if (!state || state !== storedState) {
+          throw new Error("Invalid state parameter, possible CSRF attack");
+        }
+
+        // Clear the state from storage
+        localStorage.removeItem("anychat_auth_state");
+
+        console.log("Authorization code received, exchanging for tokens...");
+
+        // Exchange the authorization code for tokens via our backend
+        const response = await fetch("/api/auth/token", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ code }),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(
+            errorData.error || "Failed to exchange code for token"
+          );
+        }
+
+        // Get the tokens from the response
+        const tokenData = await response.json();
 
         // Process the tokens in our auth context
         await handleTokenCallback(
-          accessToken,
-          refreshToken,
-          parseInt(expiresIn, 10)
+          tokenData.accessToken,
+          tokenData.refreshToken,
+          tokenData.expiresAt
         );
+
         setStatus("success");
 
-        // Check if we have a saved redirect URL
+        // Check for a saved redirect URL
         const savedRedirect = localStorage.getItem("anychat_login_redirect");
-        console.log("Redirecting to:", savedRedirect || "/");
 
         // Clear the saved redirect
         localStorage.removeItem("anychat_login_redirect");
 
         // Redirect to the saved URL or home page
-        if (savedRedirect) {
-          router.push(savedRedirect);
-        } else {
-          router.push("/");
-        }
+        router.push(savedRedirect || "/");
       } catch (err) {
         console.error("Error processing auth callback:", err);
         setError(
