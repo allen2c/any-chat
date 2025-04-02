@@ -24,16 +24,16 @@ export function LoginButton({
       const currentUrl = window.location.href;
       localStorage.setItem("anychat_login_redirect", currentUrl);
 
-      // Generate the callback URL - this is crucial for the cross-domain auth
+      // Set the callback URL - this is the AnyChat authentication callback page
       const callbackUrl = "http://localhost:3010/auth/callback";
 
-      // Construct the login URL with authorization code flow parameters
-      const loginUrl = new URL("http://localhost:3000/login");
-      loginUrl.searchParams.append("client_id", "anychat_client");
-      loginUrl.searchParams.append("redirect_uri", callbackUrl);
+      // Redirect the user to the AnyAuth authorization endpoint
+      const authorizeUrl = new URL("http://localhost:3000/api/auth/authorize");
+      authorizeUrl.searchParams.append("client_id", "anychat_client");
+      authorizeUrl.searchParams.append("redirect_uri", callbackUrl);
+      authorizeUrl.searchParams.append("response_type", "code");
 
-      // Redirect to AnyAuth login
-      window.location.href = loginUrl.toString();
+      window.location.href = authorizeUrl.toString();
     } catch (error) {
       console.error("Login failed:", error);
       setIsLoggingIn(false);
